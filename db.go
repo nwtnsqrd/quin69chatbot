@@ -17,6 +17,15 @@ func saveChatMessage(message twitch.PrivateMessage) error {
 	return err
 }
 
+/*
+func saveChatMessageManual(created_at time.Time, username, message string) error {
+	stmt := "INSERT INTO messages(created_at, username, message) VALUES ($1, $2, $3)"
+
+	_, err := db.Exec(stmt, created_at, username, message)
+	return err
+}
+*/
+
 func init() {
 
 	var err error
@@ -28,17 +37,4 @@ func init() {
 		panic("failed to connect database")
 	}
 
-	initStmt := `
-	CREATE TABLE messages (
-		id serial primary key not null,
-		created_at timestamp without time zone not null default now(),
-		username varchar not null,
-		message varchar not null
-	);
-	`
-
-	_, err = db.Exec(initStmt)
-	if err != nil {
-		panic(err)
-	}
 }
