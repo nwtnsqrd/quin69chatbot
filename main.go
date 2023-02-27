@@ -12,8 +12,8 @@ import (
 const (
 	MSG_CACHE_SIZE       = 9 // 10-1
 	MSG_REPEAT_THRESHOLD = 3
-	botUser              = "poenjoyer"
-	channel              = "quin69"
+	BOT_USER             = "poenjoyer"
+	CHANNEL              = "quin69"
 )
 
 type cachedMessage struct {
@@ -23,9 +23,11 @@ type cachedMessage struct {
 
 var msgCache [MSG_CACHE_SIZE]string
 var c int
-var cacheWarmed bool
+var cacheWarmed = false
 
-var BLACKLIST = []string{
+var client = twitch.NewClient(BOT_USER, "oauth:<OAUTHTOKEN>")
+
+var blacklist = []string{
 	"nigg",
 	"fag",
 	"black",
@@ -45,7 +47,7 @@ var BLACKLIST = []string{
 	"partyhat", // temporary
 }
 
-var DUNNING_KRUGER_SLICE = []string{
+var dunning_kruger_slice = []string{
 	"donnie krangle",
 	"danny cougar",
 	"donnie pringles",
@@ -77,8 +79,8 @@ func containsBlacklistedWord(msg string) bool {
 	normalizedMsg := strings.ToLower(msg)
 
 	// Check it against entries in the blacklist
-	for i := range BLACKLIST {
-		if strings.Contains(normalizedMsg, BLACKLIST[i]) {
+	for i := range blacklist {
+		if strings.Contains(normalizedMsg, blacklist[i]) {
 			return true
 		}
 	}
@@ -87,9 +89,9 @@ func containsBlacklistedWord(msg string) bool {
 	return strings.HasPrefix(normalizedMsg, "!")
 }
 
-func repeatPopularMessages(message twitch.PrivateMessage, client *twitch.Client) {
+func repeatPopularMessages(message twitch.PrivateMessage) {
 	// Do not process our own messages
-	if message.User.DisplayName == botUser {
+	if message.User.DisplayName == BOT_USER {
 		return
 	}
 
@@ -109,20 +111,13 @@ func repeatPopularMessages(message twitch.PrivateMessage, client *twitch.Client)
 		// Find out why and / or try to rate limit the repeats.
 		if v == MSG_REPEAT_THRESHOLD && (len(k.message) < 200 && len(k.message) > 0) && !k.sent {
 			log.Printf("REPEATED %s\n", k.message)
-			client.Say(channel, k.message)
+			client.Say(CHANNEL, k.message)
 			k.sent = true // this does not work
 		}
 	}
 }
 
 func main() {
-
-	// Connect to Twitch IRC
-	client := twitch.NewClient(botUser, "oauth:<OAUTHTOKEN>")
-
-	// Init cache state
-	cacheWarmed = false
-
 	// Register chat message callback
 	client.OnPrivateMessage(func(message twitch.PrivateMessage) {
 
@@ -138,13 +133,13 @@ func main() {
 		msgCache[c] = message.Message
 		c++
 
-		// Replies to specific messages -----------------------------------------------------------
-
+		// ---------------------------- Replies to specific messages ------------------------------
 		if strings.Contains(strings.ToLower(message.Message), "danny") && !strings.HasPrefix(message.Message, "@") {
-			idx := rand.Intn(len(DUNNING_KRUGER_SLICE))
-			client.Say(channel, fmt.Sprintf("classic %s", DUNNING_KRUGER_SLICE[idx]))
+			idx := rand.Intn(len(dunning_kruger_slice))
+			client.Say(CHANNEL, fmt.Sprintf("classic %s", dunning_kruger_slice[idx]))
 			log.Println("Dunning Kruger'd")
 		}
+		// ----------------------------------------------------------------------------------------
 
 		// Only start once the cache has filled
 		if !(c > MSG_CACHE_SIZE-1 || cacheWarmed) {
@@ -154,11 +149,11 @@ func main() {
 		cacheWarmed = true
 
 		// Participate in chat spam
-		repeatPopularMessages(message, client)
+		repeatPopularMessages(message)
 
 	})
 
-	client.Join(channel)
+	client.Join(CHANNEL)
 
 	if err := client.Connect(); err != nil {
 		panic(err)
