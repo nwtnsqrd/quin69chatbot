@@ -21,40 +21,39 @@ type cachedMessage struct {
 	sent    bool
 }
 
-var msgCache [MSG_CACHE_SIZE]string
-var c int
-var cacheWarmed = false
-
-var client = twitch.NewClient(BOT_USER, "oauth:<OAUTHTOKEN>")
-
-var blacklist = []string{
-	"nigg",
-	"fag",
-	"black",
-	"kkk",
-	"::D",     // this emote times you out for 1min
-	"http",    // don't repeat linkers
-	"borg",    // we dont borg
-	"hahaa",   // this emote adds toxicity in quins toxicity system
-	"sleeper", // do not repeat ResidentSleeper -> toxicity
-	"#",       // do not repeat hashtags
-	"kys",
-	"kill",
-	"die",
-	"nambla",
-	"@",        // do not repeat reply andies
-	"boob",     // set a good example and do not perpetuate the booba
-	"partyhat", // temporary
-}
-
-var dunning_kruger_slice = []string{
-	"donnie krangle",
-	"danny cougar",
-	"donnie pringles",
-	"daniel kramer",
-	"david krangler",
-	"danny cooper",
-}
+var (
+	msgCache    [MSG_CACHE_SIZE]string
+	c           int
+	cacheWarmed = false
+	client      = twitch.NewClient(BOT_USER, "oauth:uk443gieu4w9tk333q4v1pvljswrd9")
+	blacklist   = []string{
+		"nigg",
+		"fag",
+		"black",
+		"kkk",
+		"::D",     // this emote times you out for 1min
+		"http",    // don't repeat linkers
+		"borg",    // we dont borg
+		"hahaa",   // this emote adds toxicity in quins toxicity system
+		"sleeper", // do not repeat ResidentSleeper -> toxicity
+		"#",       // do not repeat hashtags
+		"kys",
+		"kill",
+		"die",
+		"nambla",
+		"@",        // do not repeat reply andies
+		"boob",     // set a good example and do not perpetuate the booba
+		"partyhat", // temporary
+	}
+	dunning_kruger_slice = []string{
+		"donnie krangle",
+		"danny cougar",
+		"donnie pringles",
+		"daniel kramer",
+		"david krangler",
+		"danny cooper",
+	}
+)
 
 func dupCount(msgs []string) map[cachedMessage]int {
 	dupFreq := make(map[cachedMessage]int)
