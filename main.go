@@ -62,12 +62,12 @@ func dupCount(msgs []string) map[cachedMessage]int {
 		k := cachedMessage{message: item, sent: false}
 		_, exist := dupFreq[k]
 
-		if exist {
-			dupFreq[k] += 1
+		if !exist {
+			dupFreq[k] = 1
 			continue
 		}
 
-		dupFreq[k] = 1
+		dupFreq[k] += 1
 	}
 
 	return dupFreq
@@ -98,20 +98,21 @@ func repeatPopularMessages(message twitch.PrivateMessage) {
 	dupMsgs := dupCount(msgCache[:])
 
 	for k, v := range dupMsgs {
-		// Check the blacklist to avoid repeating certain messages
-		if containsBlacklistedWord(k.message) {
-			break
-		}
-
 		// When a certain message in the cache has reached the threshold, repeat it.
 		// This is triggered way too often when there is intense spam in the chat.
 		// It's not a big problem since the messages itself have a cooldown, but it
 		// looks annoying in the log.
 		// Find out why and / or try to rate limit the repeats.
-		if v == MSG_REPEAT_THRESHOLD && (len(k.message) < 200 && len(k.message) > 0) && !k.sent {
+		if v >= MSG_REPEAT_THRESHOLD && (len(k.message) < 200 && len(k.message) > 0) && !k.sent {
+
+			// Check the blacklist to avoid repeating certain messages
+			if containsBlacklistedWord(k.message) {
+				break
+			}
+
 			log.Printf("REPEATED %s\n", k.message)
 			client.Say(CHANNEL, k.message)
-			k.sent = true // this does not work
+			k.sent = true // this does not work. When this works, it will solve the problem
 		}
 	}
 }
