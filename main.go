@@ -10,11 +10,16 @@ import (
 )
 
 const (
-	MSG_CACHE_SIZE       = 9
+	MSG_CACHE_SIZE       = 9 // 10-1
 	MSG_REPEAT_THRESHOLD = 3
 	botUser              = "poenjoyer"
 	channel              = "quin69"
 )
+
+type cachedMessage struct {
+	message string
+	sent    bool
+}
 
 var msgCache [MSG_CACHE_SIZE]string
 var c int
@@ -35,8 +40,9 @@ var BLACKLIST = []string{
 	"kill",
 	"die",
 	"nambla",
-	"@",    // do not repeat reply andies
-	"boob", // set a good example and do not perpetuate the booba
+	"@",        // do not repeat reply andies
+	"boob",     // set a good example and do not perpetuate the booba
+	"partyhat", // temporary
 }
 
 var DUNNING_KRUGER_SLICE = []string{
@@ -44,20 +50,23 @@ var DUNNING_KRUGER_SLICE = []string{
 	"danny cougar",
 	"donnie pringles",
 	"daniel kramer",
+	"david krangler",
+	"danny cooper",
 }
 
-func dupCount(msgs []string) map[string]int {
-	dupFreq := make(map[string]int)
+func dupCount(msgs []string) map[cachedMessage]int {
+	dupFreq := make(map[cachedMessage]int)
 
 	for _, item := range msgs {
-		_, exist := dupFreq[item]
+		k := cachedMessage{message: item, sent: false}
+		_, exist := dupFreq[k]
 
 		if exist {
-			dupFreq[item] += 1
+			dupFreq[k] += 1
 			continue
 		}
 
-		dupFreq[item] = 1
+		dupFreq[k] = 1
 	}
 
 	return dupFreq
@@ -78,6 +87,34 @@ func containsBlacklistedWord(msg string) bool {
 	return strings.HasPrefix(normalizedMsg, "!")
 }
 
+func repeatPopularMessages(message twitch.PrivateMessage, client *twitch.Client) {
+	// Do not process our own messages
+	if message.User.DisplayName == botUser {
+		return
+	}
+
+	// Count duplicates
+	dupMsgs := dupCount(msgCache[:])
+
+	for k, v := range dupMsgs {
+		// Check the blacklist to avoid repeating certain messages
+		if containsBlacklistedWord(k.message) {
+			break
+		}
+
+		// When a certain message in the cache has reached the threshold, repeat it.
+		// This is triggered way too often when there is intense spam in the chat.
+		// It's not a big problem since the messages itself have a cooldown, but it
+		// looks annoying in the log.
+		// Find out why and / or try to rate limit the repeats.
+		if v == MSG_REPEAT_THRESHOLD && (len(k.message) < 200 && len(k.message) > 0) && !k.sent {
+			log.Printf("REPEATED %s\n", k.message)
+			client.Say(channel, k.message)
+			k.sent = true // this does not work
+		}
+	}
+}
+
 func main() {
 
 	// Connect to Twitch IRC
@@ -89,6 +126,9 @@ func main() {
 	// Register chat message callback
 	client.OnPrivateMessage(func(message twitch.PrivateMessage) {
 
+		// save the message in Postgres
+		saveChatMessage(message)
+
 		// If msgCache is full, reset the counter
 		if c == MSG_CACHE_SIZE {
 			c = 0
@@ -98,40 +138,6 @@ func main() {
 		msgCache[c] = message.Message
 		c++
 
-		//log.Printf("%s -> %s\n", message.User.DisplayName, message.Message)
-
-		// Only start once the cache has filled
-		if c > MSG_CACHE_SIZE-1 || cacheWarmed {
-			cacheWarmed = true
-
-			// Do not process our own messages
-			if message.User.DisplayName == botUser {
-				return
-			}
-
-			// Count duplicates
-			dupMsgs := dupCount(msgCache[:])
-
-			for k, v := range dupMsgs {
-				// Check the blacklist to avoid repeating certain messages
-				if containsBlacklistedWord(k) {
-					break
-				}
-
-				// When a certain message in the cache has reached the threshold, repeat it.
-				// This is triggered way too often when there is intense spam in the chat.
-				// It's not a big problem since the messages itself have a cooldown, but it
-				// looks annoying in the log.
-				// Find out why and / or try to rate limit the repeats.
-				if v == MSG_REPEAT_THRESHOLD && len(k) < 200 {
-					fmt.Printf("REPEATED %s\n", k)
-					client.Say(channel, k)
-				}
-			}
-		}
-
-		saveChatMessage(message)
-
 		// Replies to specific messages -----------------------------------------------------------
 
 		if strings.Contains(strings.ToLower(message.Message), "danny") && !strings.HasPrefix(message.Message, "@") {
@@ -140,10 +146,16 @@ func main() {
 			log.Println("Dunning Kruger'd")
 		}
 
-		if message.Message == "hi" || message.Message == "hi :)" {
-			client.Say(channel, fmt.Sprintf("@%s hi :)", message.User.DisplayName))
-			log.Printf("Said hi to %s", message.User.DisplayName)
+		// Only start once the cache has filled
+		if !(c > MSG_CACHE_SIZE-1 || cacheWarmed) {
+			return
 		}
+
+		cacheWarmed = true
+
+		// Participate in chat spam
+		repeatPopularMessages(message, client)
+
 	})
 
 	client.Join(channel)
