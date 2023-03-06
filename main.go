@@ -5,35 +5,35 @@ import (
 	"log"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/gempir/go-twitch-irc/v4"
+	"golang.org/x/time/rate"
 )
 
 const (
 	MSG_CACHE_SIZE       = 9 // 10-1
 	MSG_REPEAT_THRESHOLD = 3
+	COOLDOWN_SECONDS     = 3
 	BOT_USER             = "poenjoyer"
 	CHANNEL              = "quin69"
 )
 
-type cachedMessage struct {
-	message string
-	sent    bool
-}
-
 var (
 	msgCache    [MSG_CACHE_SIZE]string
 	c           int
-	cacheWarmed = false
 	client      = twitch.NewClient(BOT_USER, "oauth:uk443gieu4w9tk333q4v1pvljswrd9")
-	blacklist   = []string{
+	rLimiter    = rate.Sometimes{First: 1, Interval: COOLDOWN_SECONDS * time.Second}
+	cacheWarmed = false
+
+	// Make sure that every ascii letter is lowercase
+	blacklist = []string{
 		"nigg",
 		"fag",
 		"black",
 		"kkk",
-		"::D",     // this emote times you out for 1min
+		"::d",     // this emote times you out for 1min
 		"http",    // don't repeat linkers
-		"borg",    // we dont borg
 		"hahaa",   // this emote adds toxicity in quins toxicity system
 		"sleeper", // do not repeat ResidentSleeper -> toxicity
 		"#",       // do not repeat hashtags
@@ -45,6 +45,7 @@ var (
 		"boob",     // set a good example and do not perpetuate the booba
 		"partyhat", // temporary
 	}
+
 	dunning_kruger_slice = []string{
 		"donnie krangle",
 		"danny cougar",
@@ -55,19 +56,18 @@ var (
 	}
 )
 
-func dupCount(msgs []string) map[cachedMessage]int {
-	dupFreq := make(map[cachedMessage]int)
+func dupCount(msgs []string) map[string]int {
+	dupFreq := make(map[string]int)
 
 	for _, item := range msgs {
-		k := cachedMessage{message: item, sent: false}
-		_, exist := dupFreq[k]
+		_, exist := dupFreq[item]
 
 		if !exist {
-			dupFreq[k] = 1
+			dupFreq[item] = 1
 			continue
 		}
 
-		dupFreq[k] += 1
+		dupFreq[item] += 1
 	}
 
 	return dupFreq
@@ -84,7 +84,7 @@ func containsBlacklistedWord(msg string) bool {
 		}
 	}
 
-	// finally, check if message is a command
+	// Finally, check if message is a command
 	return strings.HasPrefix(normalizedMsg, "!")
 }
 
@@ -99,22 +99,25 @@ func repeatPopularMessages(message twitch.PrivateMessage) {
 
 	for k, v := range dupMsgs {
 		// When a certain message in the cache has reached the threshold, repeat it.
-		// This is triggered way too often when there is intense spam in the chat.
-		// It's not a big problem since the messages itself have a cooldown, but it
-		// looks annoying in the log.
-		// Find out why and / or try to rate limit the repeats.
-		if v >= MSG_REPEAT_THRESHOLD && (len(k.message) < 200 && len(k.message) > 0) && !k.sent {
+		if v >= MSG_REPEAT_THRESHOLD && (len(k) < 200 && len(k) > 0) {
 
 			// Check the blacklist to avoid repeating certain messages
-			if containsBlacklistedWord(k.message) {
-				break
+			if containsBlacklistedWord(k) {
+				continue
 			}
 
-			log.Printf("REPEATED %s\n", k.message)
-			client.Say(CHANNEL, k.message)
-			k.sent = true // this does not work. When this works, it will solve the problem
+			log.Printf("REPEATED %s\n", k)
+			client.Say(CHANNEL, k)
 		}
 	}
+}
+
+func containsKeyword(msg twitch.PrivateMessage, keyword string, ignorePrefixedMessage bool) bool {
+	if ignorePrefixedMessage {
+		return strings.Contains(strings.ToLower(msg.Message), keyword) && !strings.HasPrefix(msg.Message, "@") && !strings.HasPrefix(msg.Message, "!")
+	}
+
+	return strings.Contains(strings.ToLower(msg.Message), keyword)
 }
 
 func main() {
@@ -134,22 +137,24 @@ func main() {
 		c++
 
 		// ---------------------------- Replies to specific messages ------------------------------
-		if strings.Contains(strings.ToLower(message.Message), "danny") && !strings.HasPrefix(message.Message, "@") {
+		if containsKeyword(message, "danny", true) {
 			idx := rand.Intn(len(dunning_kruger_slice))
 			client.Say(CHANNEL, fmt.Sprintf("classic %s", dunning_kruger_slice[idx]))
 			log.Println("Dunning Kruger'd")
 		}
 		// ----------------------------------------------------------------------------------------
 
-		// Only start once the cache has filled
-		if !(c > MSG_CACHE_SIZE-1 || cacheWarmed) {
+		// Only start once the cache has warmed
+		if !(c == MSG_CACHE_SIZE || cacheWarmed) {
 			return
 		}
 
 		cacheWarmed = true
 
 		// Participate in chat spam
-		repeatPopularMessages(message)
+		rLimiter.Do(func() {
+			repeatPopularMessages(message)
+		})
 
 	})
 
