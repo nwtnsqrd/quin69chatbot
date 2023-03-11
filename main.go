@@ -13,29 +13,35 @@ import (
 
 const (
 	// Amount of messages that are being cached to find the most popular ones
-	MSG_CACHE_SIZE = 9 // 10-1
+	MsgCacheSize = 9 // 10-1
 
 	// Threshold of how many times the same message has to be in msgCache in order to get repeated
-	MSG_REPEAT_THRESHOLD = 3
+	MsgRepeatThreshold = 3
 
-	// Cooldown to ratelimit sending chat messages
-	COOLDOWN_SECONDS = 3
+	// Cooldown to ratelimit spamming chat messages
+	MainCooldownSeconds = 3
+
+	// Cooldown to ratelimit sending replies
+	ReplyCooldownSeconds = 8
+
+	// Time before a reply is actually sent
+	ReplyDelaySeconds = 2
 
 	// Twitch user that is authenticated to use this bot
-	BOT_USER = "poenjoyer"
+	BotUser = "poenjoyer"
 
 	// Twitch channel that BOT_USER should connect to
-	CHANNEL = "quin69"
+	Channel = "quin69"
 )
 
 var (
-	msgCache              [MSG_CACHE_SIZE]string
-	c                     int
-	client                = twitch.NewClient(BOT_USER, "oauth:uk443gieu4w9tk333q4v1pvljswrd9")
-	mainRLimiter          = rate.Sometimes{First: 1, Interval: COOLDOWN_SECONDS * time.Second}
-	dunningKrugerRLimiter = rate.Sometimes{First: 1, Interval: COOLDOWN_SECONDS * time.Second}
-	cacheWarmed           = false
-	lastMessageSent       string
+	msgCache        [MsgCacheSize]string
+	c               int
+	client          = twitch.NewClient(BotUser, "oauth:uk443gieu4w9tk333q4v1pvljswrd9")
+	mainRLimiter    = rate.Sometimes{First: 1, Interval: MainCooldownSeconds * time.Second}
+	replyRLimiter   = rate.Sometimes{First: 1, Interval: ReplyCooldownSeconds * time.Second}
+	cacheWarmed     = false
+	lastMessageSent string
 
 	// Make sure that every ascii letter is lowercase
 	blacklist = []string{
@@ -70,14 +76,16 @@ func dupCount(msgs []string) map[string]int {
 	dupFreq := make(map[string]int)
 
 	for _, item := range msgs {
-		_, exist := dupFreq[item]
+		i := strings.TrimSpace(item)
+
+		_, exist := dupFreq[i]
 
 		if !exist {
-			dupFreq[item] = 1
+			dupFreq[i] = 1
 			continue
 		}
 
-		dupFreq[item] += 1
+		dupFreq[i] += 1
 	}
 
 	return dupFreq
@@ -100,7 +108,7 @@ func containsBlacklistedWord(msg string) bool {
 
 func repeatPopularMessages(message twitch.PrivateMessage) {
 	// Do not process our own messages
-	if message.User.DisplayName == BOT_USER {
+	if message.User.DisplayName == BotUser {
 		return
 	}
 
@@ -109,15 +117,16 @@ func repeatPopularMessages(message twitch.PrivateMessage) {
 
 	for k, v := range dupMsgs {
 		// When a certain message in the cache has reached the threshold, repeat it.
-		if v >= MSG_REPEAT_THRESHOLD && !(k == lastMessageSent) {
+		// Do not repeat the same message twice in a row
+		if v >= MsgRepeatThreshold && k != lastMessageSent {
 
 			// Check the blacklist to avoid repeating certain messages
 			if containsBlacklistedWord(k) {
 				continue
 			}
 
-			log.Printf("%s: %s\n", BOT_USER, k)
-			client.Say(CHANNEL, k)
+			log.Printf("%s: %s\n", BotUser, k)
+			client.Say(Channel, k)
 			lastMessageSent = k
 		}
 	}
@@ -141,7 +150,7 @@ func main() {
 		// saveChatMessage(message)
 
 		// If msgCache is full, reset the counter
-		if c == MSG_CACHE_SIZE {
+		if c == MsgCacheSize {
 			c = 0
 		}
 
@@ -150,17 +159,40 @@ func main() {
 		c++
 
 		// ---------------------------- Replies to specific messages ------------------------------
-		if containsKeyword(message, "danny", true) {
-			dunningKrugerRLimiter.Do(func() {
-				idx := rand.Intn(len(dunning_kruger_slice))
-				client.Say(CHANNEL, fmt.Sprintf("classic %s", dunning_kruger_slice[idx]))
-				log.Println("Dunning Kruger'd")
+		if containsKeyword(message, "danny ", true) {
+			replyRLimiter.Do(func() {
+				go func() {
+					time.Sleep(ReplyDelaySeconds * time.Second)
+					idx := rand.Intn(len(dunning_kruger_slice))
+					client.Say(Channel, fmt.Sprintf("classic %s", dunning_kruger_slice[idx]))
+					log.Println("Dunning Kruger'd")
+				}()
+			})
+		}
+
+		if containsKeyword(message, "hi ", true) {
+			replyRLimiter.Do(func() {
+				go func() {
+					time.Sleep(ReplyDelaySeconds * time.Second)
+					client.Say(Channel, fmt.Sprintf("@%s hi :)", message.User.DisplayName))
+					log.Println("Said hi to", message.User.DisplayName)
+				}()
+			})
+		}
+
+		if containsKeyword(message, "SirO perma", true) {
+			replyRLimiter.Do(func() {
+				go func() {
+					time.Sleep(ReplyDelaySeconds * time.Second)
+					client.Say(Channel, "SirO PERMANENT BANISHMENT")
+					log.Println("PERMANENT BANISHMENT")
+				}()
 			})
 		}
 		// ----------------------------------------------------------------------------------------
 
 		// Only start once the cache has warmed
-		if !(c == MSG_CACHE_SIZE || cacheWarmed) {
+		if !(c == MsgCacheSize || cacheWarmed) {
 			return
 		}
 
@@ -173,7 +205,7 @@ func main() {
 
 	})
 
-	client.Join(CHANNEL)
+	client.Join(Channel)
 
 	if err := client.Connect(); err != nil {
 		panic(err)
