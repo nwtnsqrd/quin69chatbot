@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"regexp"
 	"strings"
 	"time"
 
@@ -132,14 +133,14 @@ func repeatPopularMessages(message twitch.PrivateMessage) {
 	}
 }
 
-func containsKeyword(msg twitch.PrivateMessage, keyword string, ignorePrefixedMessage bool) bool {
-	normalizedMsg := strings.ToLower(msg.Message)
+func containsKeyword(msg twitch.PrivateMessage, expr string, ignorePrefixedMessage bool) bool {
+	match, _ := regexp.Match(expr, []byte(strings.ToLower(msg.Message)))
 
 	if ignorePrefixedMessage {
-		return strings.Contains(normalizedMsg, keyword) && !strings.HasPrefix(msg.Message, "@") && !strings.HasPrefix(msg.Message, "!")
+		return match && !strings.HasPrefix(msg.Message, "@") && !strings.HasPrefix(msg.Message, "!")
 	}
 
-	return strings.Contains(normalizedMsg, keyword)
+	return match
 }
 
 func main() {
@@ -159,7 +160,7 @@ func main() {
 		c++
 
 		// ---------------------------- Replies to specific messages ------------------------------
-		if containsKeyword(message, "danny ", true) {
+		if containsKeyword(message, `^.*danny\s.*$`, true) {
 			replyRLimiter.Do(func() {
 				go func() {
 					time.Sleep(ReplyDelaySeconds * time.Second)
@@ -170,7 +171,7 @@ func main() {
 			})
 		}
 
-		if containsKeyword(message, "hi ", true) {
+		if containsKeyword(message, `^hi\s.*$`, true) {
 			replyRLimiter.Do(func() {
 				go func() {
 					time.Sleep(ReplyDelaySeconds * time.Second)
@@ -180,7 +181,7 @@ func main() {
 			})
 		}
 
-		if containsKeyword(message, "SirO perma", true) {
+		if containsKeyword(message, `^siro\sperma.*$`, true) {
 			replyRLimiter.Do(func() {
 				go func() {
 					time.Sleep(ReplyDelaySeconds * time.Second)
