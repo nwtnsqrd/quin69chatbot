@@ -2,4 +2,5 @@
 
 set -xe
 
-go run .
+go build -v -o quinbot
+./quinbot
