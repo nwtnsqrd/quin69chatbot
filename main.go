@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"math/rand"
@@ -144,6 +145,9 @@ func matchesExpression(msg twitch.PrivateMessage, expr string, ignorePrefixedMes
 }
 
 func main() {
+	mode := flag.String("mode", "offlinechat", "use `--mode live` or `--mode offlinechat`")
+	flag.Parse()
+
 	// Register chat message callback
 	client.OnPrivateMessage(func(message twitch.PrivateMessage) {
 
@@ -191,13 +195,15 @@ func main() {
 			})
 		}
 
-		if matchesExpression(message, fmt.Sprintf("^.*%s.*$", BotUser), true) {
-			replyRLimiter.Do(func() {
-				go func() {
-					client.Say(Channel, fmt.Sprintf("@%s I am currently in unmanned BOT mode. ttyl peepoCute", message.User.DisplayName))
-					log.Println("Told", message.User.DisplayName, "that I'm away")
-				}()
-			})
+		if *mode == "offlinechat" {
+			if matchesExpression(message, fmt.Sprintf("^.*%s.*$", BotUser), false) {
+				replyRLimiter.Do(func() {
+					go func() {
+						client.Say(Channel, fmt.Sprintf("@%s I am currently in unmanned BOT mode. ttyl peepoCute", message.User.DisplayName))
+						log.Println("Told", message.User.DisplayName, "that I'm away")
+					}()
+				})
+			}
 		}
 		// ----------------------------------------------------------------------------------------
 
@@ -206,7 +212,11 @@ func main() {
 			return
 		}
 
-		cacheWarmed = true
+		// Print when the cache has warmed and the bot is ready to spam
+		if !cacheWarmed {
+			log.Println("Cache is warmed up")
+			cacheWarmed = !cacheWarmed
+		}
 
 		// Participate in chat spam
 		mainRLimiter.Do(func() {

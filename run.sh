@@ -2,5 +2,7 @@
 
 set -xe
 
+MODE=${1:-"offlinechat"}
+
 go build -v -o quinbot
-./quinbot
+./quinbot --mode $MODE
