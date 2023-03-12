@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -27,24 +28,23 @@ const (
 
 	// Time before a reply is actually sent
 	ReplyDelaySeconds = 2
-
-	// Twitch user that is authenticated to use this bot
-	BotUser = "poenjoyer"
-
-	// Twitch channel that BOT_USER should connect to
-	Channel = "quin69"
 )
 
 var (
+	// Twitch user that is authenticated to use this bot
+	BotUser = os.Getenv("QUINBOT_USER")
+
+	// Twitch channel that BotUser should connect to
+	Channel = os.Getenv("QUINBOT_CHANNEL")
+
 	msgCache        [MsgCacheSize]string
 	c               int
-	client          = twitch.NewClient(BotUser, "oauth:uk443gieu4w9tk333q4v1pvljswrd9")
+	client          = twitch.NewClient(BotUser, fmt.Sprintf("oauth:%s", os.Getenv("QUINBOT_OAUTH")))
 	mainRLimiter    = rate.Sometimes{First: 1, Interval: MainCooldownSeconds * time.Second}
 	replyRLimiter   = rate.Sometimes{First: 1, Interval: ReplyCooldownSeconds * time.Second}
 	cacheWarmed     = false
 	lastMessageSent string
 
-	// Make sure that every ascii letter is lowercase
 	blacklist = []string{
 		"nigg",
 		"fag",
@@ -116,24 +116,24 @@ func repeatPopularMessages(message twitch.PrivateMessage) {
 	// Count duplicates
 	dupMsgs := dupCount(msgCache[:])
 
-	for k, v := range dupMsgs {
+	for msg, ct := range dupMsgs {
 		// When a certain message in the cache has reached the threshold, repeat it.
 		// Do not repeat the same message twice in a row
-		if v >= MsgRepeatThreshold && k != lastMessageSent {
+		if ct >= MsgRepeatThreshold && msg != lastMessageSent {
 
 			// Check the blacklist to avoid repeating certain messages
-			if containsBlacklistedWord(k) {
+			if containsBlacklistedWord(msg) {
 				continue
 			}
 
-			log.Printf("%s: %s\n", BotUser, k)
-			client.Say(Channel, k)
-			lastMessageSent = k
+			log.Printf("%s: %s\n", BotUser, msg)
+			client.Say(Channel, msg)
+			lastMessageSent = msg
 		}
 	}
 }
 
-func containsKeyword(msg twitch.PrivateMessage, expr string, ignorePrefixedMessage bool) bool {
+func matchesExpression(msg twitch.PrivateMessage, expr string, ignorePrefixedMessage bool) bool {
 	match, _ := regexp.Match(expr, []byte(strings.ToLower(msg.Message)))
 
 	if ignorePrefixedMessage {
@@ -148,7 +148,7 @@ func main() {
 	client.OnPrivateMessage(func(message twitch.PrivateMessage) {
 
 		// save the message in Postgres
-		// saveChatMessage(message)
+		saveChatMessage(message)
 
 		// If msgCache is full, reset the counter
 		if c == MsgCacheSize {
@@ -160,7 +160,7 @@ func main() {
 		c++
 
 		// ---------------------------- Replies to specific messages ------------------------------
-		if containsKeyword(message, `^.*danny\s.*$`, true) {
+		if matchesExpression(message, `^.*danny\s.*$`, true) {
 			replyRLimiter.Do(func() {
 				go func() {
 					time.Sleep(ReplyDelaySeconds * time.Second)
@@ -171,7 +171,7 @@ func main() {
 			})
 		}
 
-		if containsKeyword(message, `^hi\s.*$`, true) {
+		if matchesExpression(message, `^hi\s.*$`, true) {
 			replyRLimiter.Do(func() {
 				go func() {
 					time.Sleep(ReplyDelaySeconds * time.Second)
@@ -181,12 +181,21 @@ func main() {
 			})
 		}
 
-		if containsKeyword(message, `^siro\sperma.*$`, true) {
+		if matchesExpression(message, `^siro\sperma.*$`, true) {
 			replyRLimiter.Do(func() {
 				go func() {
 					time.Sleep(ReplyDelaySeconds * time.Second)
-					client.Say(Channel, "SirO PERMANENT BANISHMENT")
+					client.Say(Channel, "SirO Tssk PERMANENT BANISHMENT")
 					log.Println("PERMANENT BANISHMENT")
+				}()
+			})
+		}
+
+		if matchesExpression(message, fmt.Sprintf("^.*%s.*$", BotUser), true) {
+			replyRLimiter.Do(func() {
+				go func() {
+					client.Say(Channel, fmt.Sprintf("@%s I am currently in unmanned BOT mode. ttyl peepoCute", message.User.DisplayName))
+					log.Println("Told", message.User.DisplayName, "that I'm away")
 				}()
 			})
 		}
