@@ -74,15 +74,13 @@ var (
 	}
 )
 
-func dupCount(msgs []string) map[string]int {
+func countDuplicateMessages(msgs []string) map[string]int {
 	dupFreq := make(map[string]int)
 
 	for _, item := range msgs {
 		i := strings.TrimSpace(item)
 
-		_, exist := dupFreq[i]
-
-		if !exist {
+		if _, exist := dupFreq[i]; !exist {
 			dupFreq[i] = 1
 			continue
 		}
@@ -115,7 +113,7 @@ func repeatPopularMessages(message twitch.PrivateMessage) {
 	}
 
 	// Count duplicates
-	dupMsgs := dupCount(msgCache[:])
+	dupMsgs := countDuplicateMessages(msgCache[:])
 
 	for msg, ct := range dupMsgs {
 		// When a certain message in the cache has reached the threshold, repeat it.
@@ -142,6 +140,24 @@ func matchesExpression(msg twitch.PrivateMessage, expr string, ignorePrefixedMes
 	}
 
 	return match
+}
+
+func uniqueTokensFromMessage(message twitch.PrivateMessage) []string {
+	allTokens := strings.Split(strings.ToLower(strings.TrimSpace(message.Message)), " ")
+	keys := make(map[string]bool)
+	list := []string{}
+
+	for _, item := range allTokens {
+		if containsBlacklistedWord(item) {
+			continue
+		}
+		if _, exist := keys[item]; !exist {
+			keys[item] = true
+			list = append(list, item)
+		}
+	}
+
+	return list
 }
 
 func main() {
