@@ -10,6 +10,12 @@ import (
 )
 
 func checkMessageForReplies(message twitch.PrivateMessage) {
+
+	// Ignore our own messages
+	if message.User.DisplayName == BotUser {
+		return
+	}
+
 	if matchesExpression(message, `^.*danny\s.*$`, true) {
 		replyRLimiter.Do(func() {
 			go func() {
